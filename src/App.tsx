@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import './App.css'
 import InstitutionalSignalsSection from './components/InstitutionalSignalsSection'
 import StockSuggestionsSection from './components/StockSuggestionsSection'
-import { isFirebaseConfigured } from './firebase'
+import { isFirebaseConfigured, missingFirebaseKeys } from './firebase'
 import {
   authWhitelistEmails,
   authWhitelistEnabled,
@@ -282,6 +282,9 @@ function App() {
     authWhitelistEnabled && !isFirebaseConfigured
       ? 'Firebase 尚未設定完成，無法啟用白名單登入。'
       : ''
+  const hasFirebasePermissionError =
+    storageMode === 'firebase' &&
+    /missing or insufficient permissions/i.test(errorMessage)
 
   useEffect(() => {
     if (!authWhitelistEnabled || !isFirebaseConfigured) {
@@ -1021,7 +1024,8 @@ function App() {
             資料儲存：{storageMode === 'firebase' ? 'Firebase' : 'LocalStorage'}
           </span>
           <span className="badge">
-            Firebase 設定：{isFirebaseConfigured ? '已設定' : '未設定'}
+            Firebase 設定：
+            {isFirebaseConfigured ? '已設定' : `缺少 ${missingFirebaseKeys.length} 項`}
           </span>
           <span className="badge">
             白名單登入：{authWhitelistEnabled ? '已啟用' : '本地測試關閉'}
@@ -1038,7 +1042,14 @@ function App() {
         </div>
         {!isFirebaseConfigured && (
           <p className="warning">
-            尚未設定 Firebase 環境變數，目前會暫存到瀏覽器 LocalStorage。
+            尚未設定完整 Firebase 環境變數（缺少：{missingFirebaseKeys.join(', ')}），
+            目前會暫存到瀏覽器 LocalStorage。
+          </p>
+        )}
+        {hasFirebasePermissionError && (
+          <p className="warning">
+            Firebase 已連線，但目前帳號沒有 Firestore 權限。請使用白名單帳號登入，
+            或暫時放寬 Firestore 規則後再試。
           </p>
         )}
       </header>
