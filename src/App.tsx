@@ -24,6 +24,7 @@ import {
   removeTrade,
   storageMode,
   subscribeTrades,
+  updateTrade,
 } from './services/tradeRepository'
 import {
   calculateCapitalDisciplineSummary,
@@ -185,6 +186,15 @@ function parseInputDate(value: string): string {
   return new Date(value).toISOString()
 }
 
+function toDatetimeInputValue(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return getCurrentDatetimeInputValue()
+  }
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
 function parseSymbolList(input: string): string[] {
   return [...new Set(input.split(',').map((value) => value.trim().toUpperCase()))].filter(
     Boolean,
@@ -230,6 +240,8 @@ function App() {
   const [isLoadingTrades, setIsLoadingTrades] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false)
+  const [editingTradeId, setEditingTradeId] = useState<string | null>(null)
+  const [editingTradeCreatedAt, setEditingTradeCreatedAt] = useState<number | null>(null)
   const [isRefreshingAll, setIsRefreshingAll] = useState(false)
   const [isRefreshingLongTermQuotes, setIsRefreshingLongTermQuotes] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -849,28 +861,41 @@ function App() {
     setIsSubmitting(true)
 
     try {
-      await createTrade({
-        symbol,
-        action: form.action,
-        quantity,
-        price,
-        tradedAt: parseInputDate(form.tradedAt),
-        note: form.note.trim() || undefined,
-      })
+      const tradedAt = parseInputDate(form.tradedAt)
+      const note = form.note.trim() || undefined
 
-      setSuccessMessage('交易已儲存。')
+      if (editingTradeId && editingTradeCreatedAt !== null) {
+        await updateTrade(editingTradeId, {
+          symbol,
+          action: form.action,
+          quantity,
+          price,
+          tradedAt,
+          note,
+          createdAt: editingTradeCreatedAt,
+        })
+        setSuccessMessage('交易已更新。')
+      } else {
+        await createTrade({
+          symbol,
+          action: form.action,
+          quantity,
+          price,
+          tradedAt,
+          note,
+        })
+        setSuccessMessage('交易已儲存。')
+      }
+
+      resetTradeForm()
+      setEditingTradeId(null)
+      setEditingTradeCreatedAt(null)
       setIsTradeModalOpen(false)
-      setForm((prev) => ({
-        ...prev,
-        quantity: '',
-        price: '',
-        note: '',
-        tradedAt: getCurrentDatetimeInputValue(),
-      }))
       await refreshQuote(symbol)
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知錯誤'
-      setErrorMessage(`儲存交易失敗：${message}`)
+      const actionText = editingTradeId ? '更新交易' : '儲存交易'
+      setErrorMessage(`${actionText}失敗：${message}`)
     } finally {
       setIsSubmitting(false)
     }
@@ -992,6 +1017,51 @@ function App() {
     }
 
     setFeeSettings((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const resetTradeForm = () => {
+    setForm({
+      symbol: '',
+      action: 'BUY',
+      quantity: '',
+      price: '',
+      tradedAt: getCurrentDatetimeInputValue(),
+      note: '',
+    })
+  }
+
+  const closeTradeModal = () => {
+    if (isSubmitting) {
+      return
+    }
+    setIsTradeModalOpen(false)
+    setEditingTradeId(null)
+    setEditingTradeCreatedAt(null)
+  }
+
+  const openCreateTradeModal = () => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    setEditingTradeId(null)
+    setEditingTradeCreatedAt(null)
+    resetTradeForm()
+    setIsTradeModalOpen(true)
+  }
+
+  const openEditTradeModal = (trade: TradeRecord) => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    setEditingTradeId(trade.id)
+    setEditingTradeCreatedAt(trade.createdAt)
+    setForm({
+      symbol: trade.symbol,
+      action: trade.action,
+      quantity: String(trade.quantity),
+      price: String(trade.price),
+      tradedAt: toDatetimeInputValue(trade.tradedAt),
+      note: trade.note ?? '',
+    })
+    setIsTradeModalOpen(true)
   }
 
   const handleLogin = async () => {
@@ -1527,11 +1597,7 @@ function App() {
               <h2>交易操作</h2>
               <button
                 type="button"
-                onClick={() => {
-                  setIsTradeModalOpen(true)
-                  setErrorMessage('')
-                  setSuccessMessage('')
-                }}
+                onClick={openCreateTradeModal}
               >
                 新增交易
               </button>
@@ -1605,6 +1671,15 @@ function App() {
                           <td data-label="操作" className="actions-cell">
                             <button
                               type="button"
+                              className="secondary inline"
+                              onClick={() => {
+                                openEditTradeModal(trade)
+                              }}
+                            >
+                              修改
+                            </button>
+                            <button
+                              type="button"
                               className="danger inline"
                               onClick={() => {
                                 void handleDeleteTrade(trade.id)
@@ -1627,30 +1702,24 @@ function App() {
             <div
               className="modal-backdrop"
               onClick={() => {
-                if (!isSubmitting) {
-                  setIsTradeModalOpen(false)
-                }
+                closeTradeModal()
               }}
             >
               <section
                 className="modal-card"
                 role="dialog"
                 aria-modal="true"
-                aria-label="新增交易"
+                aria-label={editingTradeId ? '修改交易' : '新增交易'}
                 onClick={(event) => {
                   event.stopPropagation()
                 }}
               >
                 <div className="section-header">
-                  <h2>新增交易</h2>
+                  <h2>{editingTradeId ? '修改交易' : '新增交易'}</h2>
                   <button
                     type="button"
                     className="secondary inline"
-                    onClick={() => {
-                      if (!isSubmitting) {
-                        setIsTradeModalOpen(false)
-                      }
-                    }}
+                    onClick={closeTradeModal}
                     disabled={isSubmitting}
                   >
                     關閉
@@ -1733,7 +1802,7 @@ function App() {
                     />
                   </label>
                   <button type="submit" disabled={isSubmitting || !isAccessGranted}>
-                    {isSubmitting ? '儲存中...' : '儲存交易'}
+                    {isSubmitting ? '儲存中...' : editingTradeId ? '儲存修改' : '儲存交易'}
                   </button>
                 </form>
               </section>

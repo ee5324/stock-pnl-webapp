@@ -6,6 +6,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  setDoc,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import type { TradeAction, TradeRecord } from '../types'
@@ -13,6 +14,7 @@ import type { TradeAction, TradeRecord } from '../types'
 const STORAGE_KEY = 'stock-tracker-trades'
 
 type TradeInput = Omit<TradeRecord, 'id' | 'createdAt'>
+type TradeUpdateInput = Omit<TradeRecord, 'id'>
 
 function parseRawTrade(value: unknown): TradeRecord | null {
   if (!value || typeof value !== 'object') {
@@ -137,6 +139,33 @@ export async function createTrade(input: TradeInput): Promise<void> {
   }
 
   await addDoc(collection(db, 'trades'), payload)
+}
+
+export async function updateTrade(
+  id: string,
+  input: TradeUpdateInput,
+): Promise<void> {
+  const payload = {
+    ...input,
+    symbol: input.symbol.trim().toUpperCase(),
+  }
+
+  if (!db) {
+    const current = readLocalTrades()
+    const next = current.map((trade) => {
+      if (trade.id !== id) {
+        return trade
+      }
+      return {
+        id,
+        ...payload,
+      } satisfies TradeRecord
+    })
+    writeLocalTrades(next)
+    return
+  }
+
+  await setDoc(doc(db, 'trades', id), payload)
 }
 
 export async function removeTrade(id: string): Promise<void> {
