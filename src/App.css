@@ -65,6 +65,32 @@
   box-shadow: 0 6px 18px rgba(79, 70, 229, 0.32);
 }
 
+.subtab-strip {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.subtab-strip button {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #3730a3;
+  border-radius: 9px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 0.88rem;
+}
+
+.subtab-strip button.active {
+  background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+  border-color: #4338ca;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3);
+}
+
 .badge-row {
   margin-top: 12px;
   display: flex;
@@ -272,6 +298,28 @@ button.secondary {
   margin-top: 12px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 30;
+}
+
+.modal-card {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+  padding: 16px;
+}
+
 .trade-form .full-width {
   grid-column: 1 / -1;
 }
@@ -402,6 +450,11 @@ td small {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .subtab-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .auth-actions {
     flex-direction: column;
   }
@@ -486,6 +539,18 @@ td small {
   .section-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 14px;
+    padding: 14px;
   }
 }
 

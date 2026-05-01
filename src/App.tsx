@@ -62,6 +62,7 @@ interface LongTermFormState {
 }
 
 type AppTab = 'dashboard' | 'longterm' | 'settings'
+type DashboardPanel = 'overview' | 'trading' | 'market'
 
 interface AuthUser {
   uid: string
@@ -217,6 +218,8 @@ function getAutoInstitutionalThresholds(
 
 function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('dashboard')
+  const [activeDashboardPanel, setActiveDashboardPanel] =
+    useState<DashboardPanel>('trading')
   const [trades, setTrades] = useState<TradeRecord[]>([])
   const [longTermHoldings, setLongTermHoldings] = useState<LongTermHolding[]>(() =>
     getLongTermHoldings(),
@@ -226,6 +229,7 @@ function App() {
   const [quoteErrors, setQuoteErrors] = useState<Record<string, string>>({})
   const [isLoadingTrades, setIsLoadingTrades] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isTradeModalOpen, setIsTradeModalOpen] = useState(false)
   const [isRefreshingAll, setIsRefreshingAll] = useState(false)
   const [isRefreshingLongTermQuotes, setIsRefreshingLongTermQuotes] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -855,6 +859,7 @@ function App() {
       })
 
       setSuccessMessage('交易已儲存。')
+      setIsTradeModalOpen(false)
       setForm((prev) => ({
         ...prev,
         quantity: '',
@@ -1021,7 +1026,8 @@ function App() {
     return (
       <main className="app">
         <section className="card">
-          <h1>登入系統</h1>
+          <h1>股票損益計算系統</h1>
+          <h2>登入系統</h2>
           <p className="warning">
             尚未設定完整 Firebase 環境變數（缺少：{missingFirebaseKeys.join(', ')}）。
           </p>
@@ -1037,7 +1043,8 @@ function App() {
     return (
       <main className="app">
         <section className="card">
-          <h1>登入系統</h1>
+          <h1>股票損益計算系統</h1>
+          <h2>登入系統</h2>
           <p className="subtle">正在確認登入狀態...</p>
         </section>
       </main>
@@ -1048,7 +1055,8 @@ function App() {
     return (
       <main className="app">
         <section className="card">
-          <h1>登入系統</h1>
+          <h1>股票損益計算系統</h1>
+          <h2>登入系統</h2>
           <p className="subtle">請先完成 Google 登入後再進入主系統。</p>
           <div className="auth-actions">
             <button
@@ -1172,7 +1180,47 @@ function App() {
 
       {!isLockedByWhitelist && activeTab === 'dashboard' && (
         <>
-          <section className="card metrics">
+          <section className="subtab-strip" aria-label="短期買賣導覽">
+            <button
+              type="button"
+              className={activeDashboardPanel === 'trading' ? 'active' : ''}
+              onClick={() => {
+                setActiveDashboardPanel('trading')
+              }}
+            >
+              交易與持股
+            </button>
+            <button
+              type="button"
+              className={activeDashboardPanel === 'overview' ? 'active' : ''}
+              onClick={() => {
+                setActiveDashboardPanel('overview')
+              }}
+            >
+              損益與風險
+            </button>
+            <button
+              type="button"
+              className={activeDashboardPanel === 'market' ? 'active' : ''}
+              onClick={() => {
+                setActiveDashboardPanel('market')
+              }}
+            >
+              市場訊號
+            </button>
+          </section>
+
+          <p className="subtle">
+            目前顯示：
+            {activeDashboardPanel === 'trading'
+              ? '交易與持股'
+              : activeDashboardPanel === 'overview'
+                ? '損益與風險'
+                : '市場訊號'}
+          </p>
+
+          {activeDashboardPanel === 'overview' && (
+            <section className="card metrics">
             <article>
               <h2>已實現損益</h2>
               <p className={toClassBySign(portfolioSummary.realizedPnl)}>
@@ -1213,9 +1261,11 @@ function App() {
               <h2>累計賣出回收</h2>
               <p>{formatCurrency(portfolioSummary.totalSellProceeds)}</p>
             </article>
-          </section>
+            </section>
+          )}
 
-          <section className="card">
+          {activeDashboardPanel === 'overview' && (
+            <section className="card">
             <h2>短線資金紀律（固定本金 20,000 元）</h2>
             <p className="subtle">
               以短線策略維持 20,000 元運作：有獲利先贖回超出本金部分，虧損時原則不補錢。
@@ -1241,9 +1291,11 @@ function App() {
                 部分持股尚無即時報價，帳戶淨值暫以持有成本估算。
               </p>
             )}
-          </section>
+            </section>
+          )}
 
-          <section className="card">
+          {activeDashboardPanel === 'overview' && (
+            <section className="card">
             <h2>停損建議（短線）</h2>
             <p className="subtle">
               目前以均價下方 {formatPercent(stopLossRate * 100)} 作為建議停損基準，可在本頁上方直接調整。
@@ -1294,9 +1346,11 @@ function App() {
                 </table>
               </div>
             )}
-          </section>
+            </section>
+          )}
 
-          <section className="card">
+          {activeDashboardPanel === 'overview' && (
+            <section className="card">
             <h2>T+2 交割警訊（近 2 個營業日）</h2>
             <p className="subtle">
               T+2 代表成交日後第 2 個營業日交割。大量買進會形成應付壓力，若資金不足可能造成違約交割風險。
@@ -1354,106 +1408,26 @@ function App() {
                 </table>
               </div>
             )}
-          </section>
+            </section>
+          )}
 
-          <StockSuggestionsSection trackedSymbols={trackedSymbols} />
-          <InstitutionalSignalsSection
-            rows={institutionalRows}
-            isLoading={isRefreshingInstitutional}
-            errorMessage={institutionalError}
-            autoEnabled={institutionalAutoEnabled}
-            autoIntervalMinutes={institutionalAutoIntervalMin}
-            lastUpdatedAt={lastInstitutionalRefreshAt}
-            onRefresh={refreshInstitutionalSignals}
-          />
+          {activeDashboardPanel === 'market' && (
+            <>
+              <StockSuggestionsSection trackedSymbols={trackedSymbols} />
+              <InstitutionalSignalsSection
+                rows={institutionalRows}
+                isLoading={isRefreshingInstitutional}
+                errorMessage={institutionalError}
+                autoEnabled={institutionalAutoEnabled}
+                autoIntervalMinutes={institutionalAutoIntervalMin}
+                lastUpdatedAt={lastInstitutionalRefreshAt}
+                onRefresh={refreshInstitutionalSignals}
+              />
+            </>
+          )}
 
-          <section className="card">
-            <h2>新增交易</h2>
-            <form className="trade-form" onSubmit={handleTradeSubmit}>
-              <label>
-                股票代號
-                <input
-                  type="text"
-                  placeholder="例如 2330 或 AAPL"
-                  value={form.symbol}
-                  onChange={(event) => {
-                    setForm((prev) => ({ ...prev, symbol: event.target.value }))
-                  }}
-                  required
-                />
-              </label>
-              <label>
-                交易類型
-                <select
-                  value={form.action}
-                  onChange={(event) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      action: event.target.value as TradeAction,
-                    }))
-                  }}
-                >
-                  <option value="BUY">買進</option>
-                  <option value="SELL">賣出</option>
-                </select>
-              </label>
-              <label>
-                股數（支援零股/碎股）
-                <input
-                  type="number"
-                  min="0.001"
-                  step="0.001"
-                  value={form.quantity}
-                  onChange={(event) => {
-                    setForm((prev) => ({ ...prev, quantity: event.target.value }))
-                  }}
-                  required
-                />
-              </label>
-              <label>
-                成交價
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.price}
-                  onChange={(event) => {
-                    setForm((prev) => ({ ...prev, price: event.target.value }))
-                  }}
-                  required
-                />
-              </label>
-              <label>
-                交易時間
-                <input
-                  type="datetime-local"
-                  value={form.tradedAt}
-                  onChange={(event) => {
-                    setForm((prev) => ({ ...prev, tradedAt: event.target.value }))
-                  }}
-                  required
-                />
-              </label>
-              <label className="full-width">
-                備註
-                <input
-                  type="text"
-                  value={form.note}
-                  onChange={(event) => {
-                    setForm((prev) => ({ ...prev, note: event.target.value }))
-                  }}
-                  placeholder="可留空"
-                />
-              </label>
-              <button type="submit" disabled={isSubmitting || !isAccessGranted}>
-                {isSubmitting ? '儲存中...' : '儲存交易'}
-              </button>
-            </form>
-            {errorMessage && <p className="error">{errorMessage}</p>}
-            {successMessage && <p className="success">{successMessage}</p>}
-          </section>
-
-          <section className="card">
+          {activeDashboardPanel === 'trading' && (
+            <section className="card">
             <div className="section-header">
               <h2>持股總覽</h2>
               <button
@@ -1544,9 +1518,34 @@ function App() {
                 </table>
               </div>
             )}
-          </section>
+            </section>
+          )}
 
-          <section className="card">
+          {activeDashboardPanel === 'trading' && (
+            <section className="card">
+            <div className="section-header">
+              <h2>交易操作</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTradeModalOpen(true)
+                  setErrorMessage('')
+                  setSuccessMessage('')
+                }}
+              >
+                新增交易
+              </button>
+            </div>
+            <p className="subtle">
+              手機版可直接用按鈕開啟新增交易視窗，不用下拉到頁面底部。
+            </p>
+            {errorMessage && <p className="error">{errorMessage}</p>}
+            {successMessage && <p className="success">{successMessage}</p>}
+            </section>
+          )}
+
+          {activeDashboardPanel === 'trading' && (
+            <section className="card">
             <h2>交易紀錄</h2>
             {isLoadingTrades ? (
               <p className="subtle">讀取中...</p>
@@ -1621,7 +1620,125 @@ function App() {
                 </table>
               </div>
             )}
-          </section>
+            </section>
+          )}
+
+          {isTradeModalOpen && (
+            <div
+              className="modal-backdrop"
+              onClick={() => {
+                if (!isSubmitting) {
+                  setIsTradeModalOpen(false)
+                }
+              }}
+            >
+              <section
+                className="modal-card"
+                role="dialog"
+                aria-modal="true"
+                aria-label="新增交易"
+                onClick={(event) => {
+                  event.stopPropagation()
+                }}
+              >
+                <div className="section-header">
+                  <h2>新增交易</h2>
+                  <button
+                    type="button"
+                    className="secondary inline"
+                    onClick={() => {
+                      if (!isSubmitting) {
+                        setIsTradeModalOpen(false)
+                      }
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    關閉
+                  </button>
+                </div>
+                <form className="trade-form" onSubmit={handleTradeSubmit}>
+                  <label>
+                    股票代號
+                    <input
+                      type="text"
+                      placeholder="例如 2330 或 AAPL"
+                      value={form.symbol}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, symbol: event.target.value }))
+                      }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    交易類型
+                    <select
+                      value={form.action}
+                      onChange={(event) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          action: event.target.value as TradeAction,
+                        }))
+                      }}
+                    >
+                      <option value="BUY">買進</option>
+                      <option value="SELL">賣出</option>
+                    </select>
+                  </label>
+                  <label>
+                    股數（支援零股/碎股）
+                    <input
+                      type="number"
+                      min="0.001"
+                      step="0.001"
+                      value={form.quantity}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, quantity: event.target.value }))
+                      }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    成交價
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, price: event.target.value }))
+                      }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    交易時間
+                    <input
+                      type="datetime-local"
+                      value={form.tradedAt}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, tradedAt: event.target.value }))
+                      }}
+                      required
+                    />
+                  </label>
+                  <label className="full-width">
+                    備註
+                    <input
+                      type="text"
+                      value={form.note}
+                      onChange={(event) => {
+                        setForm((prev) => ({ ...prev, note: event.target.value }))
+                      }}
+                      placeholder="可留空"
+                    />
+                  </label>
+                  <button type="submit" disabled={isSubmitting || !isAccessGranted}>
+                    {isSubmitting ? '儲存中...' : '儲存交易'}
+                  </button>
+                </form>
+              </section>
+            </div>
+          )}
         </>
       )}
 
