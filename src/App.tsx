@@ -285,6 +285,7 @@ function App() {
   const hasFirebasePermissionError =
     storageMode === 'firebase' &&
     /missing or insufficient permissions/i.test(errorMessage)
+  const canUseFirebaseAuth = isFirebaseConfigured
 
   useEffect(() => {
     if (!authWhitelistEnabled || !isFirebaseConfigured) {
@@ -1047,10 +1048,23 @@ function App() {
           </p>
         )}
         {hasFirebasePermissionError && (
-          <p className="warning">
-            Firebase 已連線，但目前帳號沒有 Firestore 權限。請使用白名單帳號登入，
-            或暫時放寬 Firestore 規則後再試。
-          </p>
+          <>
+            <p className="warning">
+              Firebase 已連線，但目前帳號沒有 Firestore 權限。請使用白名單帳號登入，
+              或暫時放寬 Firestore 規則後再試。
+            </p>
+            {canUseFirebaseAuth && !authUser && (
+              <div className="auth-actions">
+                <button
+                  type="button"
+                  onClick={handleLogin}
+                  disabled={isAuthBusy || isAuthChecking}
+                >
+                  {isAuthBusy || isAuthChecking ? '登入中...' : '立即 Google 登入'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </header>
 
@@ -1934,7 +1948,7 @@ function App() {
             <p className="subtle">
               已寫入僅允許 `y.chengju@gmail.com`，目前本地測試預設關閉。
             </p>
-            {authWhitelistEnabled && (
+            {canUseFirebaseAuth && (
               <div className="auth-actions">
                 <button
                   type="button"
@@ -1952,6 +1966,11 @@ function App() {
                   登出
                 </button>
               </div>
+            )}
+            {!authWhitelistEnabled && canUseFirebaseAuth && (
+              <p className="subtle">
+                目前未強制白名單登入；若 Firestore 規則要求登入，請在此手動登入。
+              </p>
             )}
             <p className="subtle">
               目前登入：{authUser?.displayName ?? authUser?.email ?? '未登入'}
