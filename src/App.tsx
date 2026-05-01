@@ -426,6 +426,47 @@ function App() {
     return calculatePortfolioSummary(trades, quotes, feeSettings)
   }, [trades, quotes, feeSettings])
 
+  const positionsByReturnImpact = useMemo(() => {
+    return [...portfolioSummary.positions].sort((left, right) => {
+      const lv = left.totalPnl
+      const rv = right.totalPnl
+      if (lv === null && rv === null) {
+        return left.symbol.localeCompare(right.symbol)
+      }
+      if (lv === null) {
+        return 1
+      }
+      if (rv === null) {
+        return -1
+      }
+      if (rv !== lv) {
+        return rv - lv
+      }
+      return left.symbol.localeCompare(right.symbol)
+    })
+  }, [portfolioSummary.positions])
+
+  const returnStatsCounts = useMemo(() => {
+    let gain = 0
+    let loss = 0
+    let flat = 0
+    let unknown = 0
+    for (const position of portfolioSummary.positions) {
+      if (position.totalPnl === null) {
+        unknown += 1
+        continue
+      }
+      if (position.totalPnl > 0) {
+        gain += 1
+      } else if (position.totalPnl < 0) {
+        loss += 1
+      } else {
+        flat += 1
+      }
+    }
+    return { gain, loss, flat, unknown }
+  }, [portfolioSummary.positions])
+
   const capitalDiscipline = useMemo(() => {
     return calculateCapitalDisciplineSummary(
       trades,
@@ -1374,6 +1415,96 @@ function App() {
 
           {activeDashboardPanel === 'overview' && (
             <section className="card">
+              <h2>投資報酬統計</h2>
+              <p className="subtle">
+                下方列出每一檔標的的累計買進投入、已實現／未實現損益與總報酬率；排序依「總損益」由高到低（尚無即時報價者排在後面）。
+                報酬率公式：總損益 ÷ 該標的累計買進付出（成交＋買進手續費），與上方「整體收益率」（總損益 ÷ 全體累計買進成本）定義一致。
+              </p>
+              <div className="badge-row">
+                <span className="badge">
+                  總損益：{formatCurrency(portfolioSummary.totalPnl)}
+                </span>
+                <span className="badge">
+                  整體報酬率：{formatPercent(portfolioSummary.overallReturnRate)}
+                </span>
+                <span className="badge">盈利檔數：{returnStatsCounts.gain}</span>
+                <span className="badge">虧損檔數：{returnStatsCounts.loss}</span>
+                {returnStatsCounts.flat > 0 ? (
+                  <span className="badge">持平檔數：{returnStatsCounts.flat}</span>
+                ) : null}
+                {returnStatsCounts.unknown > 0 ? (
+                  <span className="badge">
+                    待補報價：{returnStatsCounts.unknown}（無法計算總損益）
+                  </span>
+                ) : null}
+              </div>
+              {portfolioSummary.positions.length === 0 ? (
+                <p className="subtle">尚無任何標的交易紀錄，無法統計報酬。</p>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>代號</th>
+                        <th>持股</th>
+                        <th>累計買進投入</th>
+                        <th>持有成本</th>
+                        <th>市值(估)</th>
+                        <th>已實現</th>
+                        <th>未實現</th>
+                        <th>總損益</th>
+                        <th>報酬率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positionsByReturnImpact.map((position) => (
+                        <tr key={position.symbol}>
+                          <td data-label="代號">{position.symbol}</td>
+                          <td data-label="持股">{formatNumber(position.quantity)}</td>
+                          <td data-label="累計買進投入">
+                            {formatCurrency(position.lifetimeBuyCost)}
+                          </td>
+                          <td data-label="持有成本">
+                            {formatCurrency(position.costBasis)}
+                          </td>
+                          <td data-label="市值(估)">
+                            {formatCurrency(position.marketValue)}
+                          </td>
+                          <td
+                            data-label="已實現"
+                            className={toClassBySign(position.realizedPnl)}
+                          >
+                            {formatCurrency(position.realizedPnl)}
+                          </td>
+                          <td
+                            data-label="未實現"
+                            className={toClassBySign(position.unrealizedPnl)}
+                          >
+                            {formatCurrency(position.unrealizedPnl)}
+                          </td>
+                          <td
+                            data-label="總損益"
+                            className={toClassBySign(position.totalPnl)}
+                          >
+                            {formatCurrency(position.totalPnl)}
+                          </td>
+                          <td
+                            data-label="報酬率"
+                            className={toClassBySign(position.returnRate)}
+                          >
+                            {formatPercent(position.returnRate)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeDashboardPanel === 'overview' && (
+            <section className="card">
             <h2>短線資金紀律（固定本金 20,000 元）</h2>
             <p className="subtle">
               以短線策略維持 20,000 元運作：有獲利先贖回超出本金部分，虧損時原則不補錢。
@@ -1579,6 +1710,9 @@ function App() {
                 ? `，最近更新：${new Date(lastAutoRefreshAt).toLocaleTimeString('zh-TW')}`
                 : ''}
             </p>
+            <p className="subtle">
+              「總損益／報酬率」為該標的已實現＋未實現；若仍持股但尚無報價，總損益會顯示為「--」，請按更新取得現價。
+            </p>
             {portfolioSummary.positions.length === 0 ? (
               <p className="subtle">目前沒有持股資料。</p>
             ) : (
@@ -1590,10 +1724,13 @@ function App() {
                       <th>股數</th>
                       <th>均價</th>
                       <th>持有成本</th>
+                      <th>累計買進</th>
                       <th>最新價</th>
                       <th>可回收市值(估)</th>
                       <th>未實現損益</th>
                       <th>已實現損益</th>
+                      <th>總損益</th>
+                      <th>報酬率</th>
                       <th>報價</th>
                     </tr>
                   </thead>
@@ -1606,6 +1743,9 @@ function App() {
                           <td data-label="股數">{formatNumber(position.quantity)}</td>
                           <td data-label="均價">{formatCurrency(position.averageCost)}</td>
                           <td data-label="持有成本">{formatCurrency(position.costBasis)}</td>
+                          <td data-label="累計買進">
+                            {formatCurrency(position.lifetimeBuyCost)}
+                          </td>
                           <td data-label="最新價">
                             {quote ? formatCurrency(quote.price) : '--'}
                           </td>
@@ -1623,6 +1763,18 @@ function App() {
                             className={toClassBySign(position.realizedPnl)}
                           >
                             {formatCurrency(position.realizedPnl)}
+                          </td>
+                          <td
+                            data-label="總損益"
+                            className={toClassBySign(position.totalPnl)}
+                          >
+                            {formatCurrency(position.totalPnl)}
+                          </td>
+                          <td
+                            data-label="報酬率"
+                            className={toClassBySign(position.returnRate)}
+                          >
+                            {formatPercent(position.returnRate)}
                           </td>
                           <td data-label="報價" className="actions-cell">
                             <button

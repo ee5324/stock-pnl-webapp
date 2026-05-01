@@ -44,6 +44,12 @@ export interface PositionSummary {
   marketValue: number | null
   unrealizedPnl: number | null
   realizedPnl: number
+  /** 該標的累計買進付出（成交金額＋買進手續費），作為單一標的報酬率分母 */
+  lifetimeBuyCost: number
+  /** 已實現＋未實現；尚無報價且仍持股時為 null */
+  totalPnl: number | null
+  /** (totalPnl / lifetimeBuyCost) × 100，資料不足時為 null */
+  returnRate: number | null
 }
 
 export interface PortfolioSummary {

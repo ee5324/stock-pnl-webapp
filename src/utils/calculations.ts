@@ -13,6 +13,7 @@ interface CostAccumulator {
   quantity: number
   costBasis: number
   realizedPnl: number
+  lifetimeBuyCost: number
 }
 
 export interface TradeChargeBreakdown {
@@ -142,7 +143,12 @@ export function calculatePortfolioSummary(
   for (const trade of sortedTrades) {
     const symbol = trade.symbol.toUpperCase()
     const current =
-      accumulators.get(symbol) ?? { quantity: 0, costBasis: 0, realizedPnl: 0 }
+      accumulators.get(symbol) ?? {
+        quantity: 0,
+        costBasis: 0,
+        realizedPnl: 0,
+        lifetimeBuyCost: 0,
+      }
     const charges = calculateTradeCharges(
       trade.action,
       trade.quantity,
@@ -153,6 +159,7 @@ export function calculatePortfolioSummary(
     if (trade.action === 'BUY') {
       current.quantity += trade.quantity
       current.costBasis += charges.grossAmount + charges.brokerFee
+      current.lifetimeBuyCost += charges.grossAmount + charges.brokerFee
       accumulators.set(symbol, current)
       continue
     }
@@ -215,6 +222,21 @@ export function calculatePortfolioSummary(
       hasUnknownQuote = true
     }
 
+    let totalSymbolPnl: number | null
+    if (!hasQuantity) {
+      totalSymbolPnl = info.realizedPnl
+    } else if (typeof quotePrice === 'number' && positionUnrealized !== null) {
+      totalSymbolPnl = info.realizedPnl + positionUnrealized
+    } else {
+      totalSymbolPnl = null
+    }
+
+    const lifetimeBuyRounded = roundCurrency(info.lifetimeBuyCost)
+    const returnRate =
+      lifetimeBuyRounded <= 0 || totalSymbolPnl === null
+        ? null
+        : (totalSymbolPnl / lifetimeBuyRounded) * 100
+
     positions.push({
       symbol,
       quantity: info.quantity,
@@ -223,6 +245,9 @@ export function calculatePortfolioSummary(
       marketValue: positionMarketValue,
       unrealizedPnl: positionUnrealized,
       realizedPnl: info.realizedPnl,
+      lifetimeBuyCost: lifetimeBuyRounded,
+      totalPnl: totalSymbolPnl === null ? null : roundCurrency(totalSymbolPnl),
+      returnRate,
     })
   }
 
