@@ -38,14 +38,24 @@ export interface CapitalDisciplineSummary {
   buyBudget: number
 }
 
+export type PriceTargetMode = 'PERCENT' | 'AMOUNT'
+
+export interface ShortTermTargetInput {
+  mode: PriceTargetMode
+  value: number
+}
+
 export interface StopLossSuggestion {
   symbol: string
   quantity: number
   averageCost: number
   currentPrice: number | null
   stopLossPrice: number
+  takeProfitPrice: number
   distanceToStopPct: number | null
+  distanceToTakeProfitPct: number | null
   isTriggered: boolean | null
+  isTakeProfitTriggered: boolean | null
 }
 
 export const defaultFeeSettings: FeeSettings = {
@@ -298,20 +308,38 @@ export function calculateCapitalDisciplineSummary(
 export function calculateStopLossSuggestions(
   positions: PositionSummary[],
   quotes: Record<string, QuoteData>,
-  stopLossRate: number,
+  stopLossInput: ShortTermTargetInput,
+  takeProfitInput: ShortTermTargetInput,
 ): StopLossSuggestion[] {
-  const clampedRate = Math.min(Math.max(stopLossRate, 0), 0.5)
+  const safeStopLossValue = Math.max(0, stopLossInput.value)
+  const safeTakeProfitValue = Math.max(0, takeProfitInput.value)
+
   const rows = positions
     .filter((item) => item.quantity > 0)
     .map((position) => {
       const currentPrice = quotes[position.symbol]?.price ?? null
-      const stopLossPrice = position.averageCost * (1 - clampedRate)
+      const stopLossPrice =
+        stopLossInput.mode === 'PERCENT'
+          ? position.averageCost *
+            (1 - Math.min(Math.max(safeStopLossValue / 100, 0), 0.9))
+          : Math.max(0, position.averageCost - safeStopLossValue)
+      const takeProfitPrice =
+        takeProfitInput.mode === 'PERCENT'
+          ? position.averageCost *
+            (1 + Math.min(Math.max(safeTakeProfitValue / 100, 0), 5))
+          : position.averageCost + safeTakeProfitValue
       const distanceToStopPct =
         currentPrice === null || currentPrice === 0
           ? null
           : ((currentPrice - stopLossPrice) / currentPrice) * 100
+      const distanceToTakeProfitPct =
+        currentPrice === null || currentPrice === 0
+          ? null
+          : ((takeProfitPrice - currentPrice) / currentPrice) * 100
       const isTriggered =
         currentPrice === null ? null : currentPrice <= stopLossPrice
+      const isTakeProfitTriggered =
+        currentPrice === null ? null : currentPrice >= takeProfitPrice
 
       return {
         symbol: position.symbol,
@@ -319,20 +347,29 @@ export function calculateStopLossSuggestions(
         averageCost: position.averageCost,
         currentPrice,
         stopLossPrice,
+        takeProfitPrice,
         distanceToStopPct,
+        distanceToTakeProfitPct,
         isTriggered,
+        isTakeProfitTriggered,
       } satisfies StopLossSuggestion
     })
 
   rows.sort((left, right) => {
-    if (left.isTriggered === right.isTriggered) {
-      return left.symbol.localeCompare(right.symbol)
-    }
-    if (left.isTriggered === true) {
-      return -1
-    }
-    if (right.isTriggered === true) {
+    const score = (item: StopLossSuggestion): number => {
+      if (item.isTriggered === true) {
+        return 3
+      }
+      if (item.isTakeProfitTriggered === true) {
+        return 2
+      }
       return 1
+    }
+
+    const leftScore = score(left)
+    const rightScore = score(right)
+    if (leftScore !== rightScore) {
+      return rightScore - leftScore
     }
     return left.symbol.localeCompare(right.symbol)
   })

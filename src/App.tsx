@@ -33,6 +33,7 @@ import {
   calculateTPlus2Summary,
   calculateTradeCharges,
   defaultFeeSettings,
+  type PriceTargetMode,
   type TPlus2Thresholds,
 } from './utils/calculations'
 import type {
@@ -132,6 +133,13 @@ function formatPercent(value: number | null): string {
   return `${percentFormatter.format(value)}%`
 }
 
+function formatTargetInput(mode: PriceTargetMode, value: number): string {
+  if (mode === 'PERCENT') {
+    return `${percentFormatter.format(value)}%`
+  }
+  return `${numberFormatter.format(value)} 元/股`
+}
+
 function getTPlus2LevelDisplay(level: 'ALERT' | 'WATCH' | 'INFO'): {
   text: string
   className: string
@@ -154,6 +162,19 @@ function getStopLossStatusDisplay(isTriggered: boolean | null): {
   }
   if (isTriggered === false) {
     return { text: '續抱觀察', className: 'buy' }
+  }
+  return { text: '待報價', className: 'na' }
+}
+
+function getTakeProfitStatusDisplay(isTriggered: boolean | null): {
+  text: string
+  className: string
+} {
+  if (isTriggered === true) {
+    return { text: '達成停利', className: 'buy' }
+  }
+  if (isTriggered === false) {
+    return { text: '續抱觀察', className: 'neutral' }
   }
   return { text: '待報價', className: 'na' }
 }
@@ -254,7 +275,10 @@ function App() {
   const [longTermRotateLossRate, setLongTermRotateLossRate] = useState(0.15)
   const [feeSettings, setFeeSettings] = useState<FeeSettings>(defaultFeeSettings)
   const [capitalLimit] = useState(20000)
-  const [stopLossRate, setStopLossRate] = useState(0.03)
+  const [stopLossMode, setStopLossMode] = useState<PriceTargetMode>('PERCENT')
+  const [stopLossValue, setStopLossValue] = useState(3)
+  const [takeProfitMode, setTakeProfitMode] = useState<PriceTargetMode>('PERCENT')
+  const [takeProfitValue, setTakeProfitValue] = useState(6)
   const [tPlus2Thresholds, setTPlus2Thresholds] = useState<TPlus2Thresholds>({
     payableAlert: 300000,
     netOutflowAlert: 150000,
@@ -415,9 +439,23 @@ function App() {
     return calculateStopLossSuggestions(
       portfolioSummary.positions,
       quotes,
-      stopLossRate,
+      {
+        mode: stopLossMode,
+        value: stopLossValue,
+      },
+      {
+        mode: takeProfitMode,
+        value: takeProfitValue,
+      },
     )
-  }, [portfolioSummary.positions, quotes, stopLossRate])
+  }, [
+    portfolioSummary.positions,
+    quotes,
+    stopLossMode,
+    stopLossValue,
+    takeProfitMode,
+    takeProfitValue,
+  ])
 
   const tPlus2Summary = useMemo(() => {
     return calculateTPlus2Summary(trades, feeSettings, tPlus2Thresholds)
@@ -1366,12 +1404,13 @@ function App() {
 
           {activeDashboardPanel === 'overview' && (
             <section className="card">
-            <h2>停損建議（短線）</h2>
+            <h2>停損/停利建議（短線）</h2>
             <p className="subtle">
-              目前以均價下方 {formatPercent(stopLossRate * 100)} 作為建議停損基準，可在本頁上方直接調整。
+              停損基準：{formatTargetInput(stopLossMode, stopLossValue)}；停利基準：
+              {formatTargetInput(takeProfitMode, takeProfitValue)}。
             </p>
             {stopLossSuggestions.length === 0 ? (
-              <p className="subtle">目前沒有持股，暫無停損建議。</p>
+              <p className="subtle">目前沒有持股，暫無停損/停利建議。</p>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -1383,12 +1422,18 @@ function App() {
                       <th>現價</th>
                       <th>建議停損價</th>
                       <th>距離停損</th>
-                      <th>狀態</th>
+                      <th>建議停利價</th>
+                      <th>距離停利</th>
+                      <th>停損狀態</th>
+                      <th>停利狀態</th>
                     </tr>
                   </thead>
                   <tbody>
                     {stopLossSuggestions.map((item) => {
-                      const status = getStopLossStatusDisplay(item.isTriggered)
+                      const stopStatus = getStopLossStatusDisplay(item.isTriggered)
+                      const takeProfitStatus = getTakeProfitStatusDisplay(
+                        item.isTakeProfitTriggered,
+                      )
                       return (
                         <tr key={item.symbol}>
                           <td data-label="代號">{item.symbol}</td>
@@ -1404,9 +1449,27 @@ function App() {
                           >
                             {formatPercent(item.distanceToStopPct)}
                           </td>
-                          <td data-label="狀態">
-                            <span className={`signal-badge ${status.className}`}>
-                              {status.text}
+                          <td data-label="建議停利價">
+                            {formatCurrency(item.takeProfitPrice)}
+                          </td>
+                          <td
+                            data-label="距離停利"
+                            className={toClassBySign(
+                              item.distanceToTakeProfitPct === null
+                                ? null
+                                : -item.distanceToTakeProfitPct,
+                            )}
+                          >
+                            {formatPercent(item.distanceToTakeProfitPct)}
+                          </td>
+                          <td data-label="停損狀態">
+                            <span className={`signal-badge ${stopStatus.className}`}>
+                              {stopStatus.text}
+                            </span>
+                          </td>
+                          <td data-label="停利狀態">
+                            <span className={`signal-badge ${takeProfitStatus.className}`}>
+                              {takeProfitStatus.text}
                             </span>
                           </td>
                         </tr>
@@ -2230,19 +2293,66 @@ function App() {
                 <input type="number" value={capitalLimit} disabled readOnly />
               </label>
               <label>
-                短線停損幅度（%）
+                短線停損模式
+                <select
+                  value={stopLossMode}
+                  onChange={(event) => {
+                    setStopLossMode(event.target.value as PriceTargetMode)
+                  }}
+                >
+                  <option value="PERCENT">百分比（%）</option>
+                  <option value="AMOUNT">每股金額（元）</option>
+                </select>
+              </label>
+              <label>
+                短線停損值（{stopLossMode === 'PERCENT' ? '%' : '元/股'}）
                 <input
                   type="number"
-                  min="0.5"
-                  max="20"
+                  min="0.1"
                   step="0.1"
-                  value={stopLossRate * 100}
+                  value={stopLossValue}
                   onChange={(event) => {
                     const parsed = Number(event.target.value)
                     if (!Number.isFinite(parsed)) {
                       return
                     }
-                    setStopLossRate(Math.min(0.2, Math.max(0.005, parsed / 100)))
+                    setStopLossValue(
+                      stopLossMode === 'PERCENT'
+                        ? Math.min(90, Math.max(0.1, parsed))
+                        : Math.max(0.1, parsed),
+                    )
+                  }}
+                />
+              </label>
+              <label>
+                短線停利模式
+                <select
+                  value={takeProfitMode}
+                  onChange={(event) => {
+                    setTakeProfitMode(event.target.value as PriceTargetMode)
+                  }}
+                >
+                  <option value="PERCENT">百分比（%）</option>
+                  <option value="AMOUNT">每股金額（元）</option>
+                </select>
+              </label>
+              <label>
+                短線停利值（{takeProfitMode === 'PERCENT' ? '%' : '元/股'}）
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={takeProfitValue}
+                  onChange={(event) => {
+                    const parsed = Number(event.target.value)
+                    if (!Number.isFinite(parsed)) {
+                      return
+                    }
+                    setTakeProfitValue(
+                      takeProfitMode === 'PERCENT'
+                        ? Math.min(500, Math.max(0.1, parsed))
+                        : Math.max(0.1, parsed),
+                    )
                   }}
                 />
               </label>
