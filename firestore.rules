@@ -1,11 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isWhitelistedUser() {
-      return request.auth != null &&
-        request.auth.token.email in ['y.chengju@gmail.com'];
-    }
-
     function isValidTrade(data) {
       return data.keys().hasOnly([
           'symbol',
@@ -33,9 +28,9 @@ service cloud.firestore {
     }
 
     match /trades/{tradeId} {
-      allow read: if isWhitelistedUser();
-      allow create: if isWhitelistedUser() && isValidTrade(request.resource.data);
-      allow delete: if isWhitelistedUser();
+      allow read: if true;
+      allow create: if isValidTrade(request.resource.data);
+      allow delete: if true;
       allow update: if false;
     }
   }

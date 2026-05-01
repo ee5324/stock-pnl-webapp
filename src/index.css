@@ -4,7 +4,7 @@
   line-height: 1.45;
   font-weight: 400;
   color: #111827;
-  background: #f1f5f9;
+  background: radial-gradient(circle at top, #e0e7ff 0%, #f8fafc 36%, #f1f5f9 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,6 +18,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background: inherit;
 }
 
 #root {

@@ -254,9 +254,7 @@ function App() {
   const [institutionalAutoIntervalMin, setInstitutionalAutoIntervalMin] = useState(30)
   const [lastInstitutionalRefreshAt, setLastInstitutionalRefreshAt] = useState('')
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
-  const [isAuthChecking, setIsAuthChecking] = useState(
-    authWhitelistEnabled && isFirebaseConfigured,
-  )
+  const [isAuthChecking, setIsAuthChecking] = useState(isFirebaseConfigured)
   const [isAuthBusy, setIsAuthBusy] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
   const [form, setForm] = useState<TradeFormState>({
@@ -278,6 +276,8 @@ function App() {
   const isAccessGranted =
     !authWhitelistEnabled || isEmailWhitelisted(authUser?.email ?? null)
   const isLockedByWhitelist = authWhitelistEnabled && !isAccessGranted
+  const isLoggedIn = authUser !== null
+  const canEnterSystem = isLoggedIn && isAccessGranted
   const authConfigWarning =
     authWhitelistEnabled && !isFirebaseConfigured
       ? 'Firebase 尚未設定完成，無法啟用白名單登入。'
@@ -288,7 +288,7 @@ function App() {
   const canUseFirebaseAuth = isFirebaseConfigured
 
   useEffect(() => {
-    if (!authWhitelistEnabled || !isFirebaseConfigured) {
+    if (!isFirebaseConfigured) {
       return () => undefined
     }
 
@@ -297,7 +297,11 @@ function App() {
         setAuthUser(nextUser)
         setIsAuthChecking(false)
 
-        if (nextUser && !isEmailWhitelisted(nextUser.email)) {
+        if (
+          authWhitelistEnabled &&
+          nextUser &&
+          !isEmailWhitelisted(nextUser.email)
+        ) {
           setAuthMessage('此帳號不在白名單，已自動登出。')
           void logoutCurrentUser()
           return
@@ -312,10 +316,10 @@ function App() {
     )
 
     return unsubscribe
-  }, [])
+  }, [authWhitelistEnabled])
 
   useEffect(() => {
-    if (!isAccessGranted) {
+    if (!canEnterSystem) {
       return () => undefined
     }
     const unsubscribe = subscribeTrades(
@@ -330,7 +334,7 @@ function App() {
     )
 
     return unsubscribe
-  }, [isAccessGranted])
+  }, [canEnterSystem])
 
   const tradeTrackedSymbols = useMemo(() => {
     const quantityMap = new Map<string, number>()
@@ -1011,6 +1015,57 @@ function App() {
     } finally {
       setIsAuthBusy(false)
     }
+  }
+
+  if (!isFirebaseConfigured) {
+    return (
+      <main className="app">
+        <section className="card">
+          <h1>登入系統</h1>
+          <p className="warning">
+            尚未設定完整 Firebase 環境變數（缺少：{missingFirebaseKeys.join(', ')}）。
+          </p>
+          <p className="subtle">
+            目前無法啟用登入頁，請先完成環境變數後重新整理頁面。
+          </p>
+        </section>
+      </main>
+    )
+  }
+
+  if (isAuthChecking) {
+    return (
+      <main className="app">
+        <section className="card">
+          <h1>登入系統</h1>
+          <p className="subtle">正在確認登入狀態...</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <main className="app">
+        <section className="card">
+          <h1>登入系統</h1>
+          <p className="subtle">請先完成 Google 登入後再進入主系統。</p>
+          <div className="auth-actions">
+            <button
+              type="button"
+              onClick={handleLogin}
+              disabled={isAuthBusy || isAuthChecking}
+            >
+              {isAuthBusy || isAuthChecking ? '登入中...' : 'Google 登入'}
+            </button>
+          </div>
+          {authWhitelistEnabled && (
+            <p className="subtle">白名單：{authWhitelistEmails.join(', ')}</p>
+          )}
+          {authMessage && <p className="warning">{authMessage}</p>}
+        </section>
+      </main>
+    )
   }
 
   return (
