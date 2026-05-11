@@ -63,7 +63,7 @@ VITE_AUTH_WHITELIST_EMAILS=y.chengju@gmail.com
 
 ### 報價伺服器 `server/index.js`（建議）
 
-- 先向 **Yahoo chart** 取價；失敗且專案根目錄 `.env` 設有 **`FINNHUB_API_KEY`** 時，改打 [Finnhub Quote](https://finnhub.io/docs/api/quote)，必要時再抓 [profile2](https://finnhub.io/docs/api/company-profile2) 當股名／幣別。
+- 先向 **Yahoo chart** 取價；失敗且設有 **`FINNHUB_API_KEY`** 時改打 [Finnhub Quote](https://finnhub.io/docs/api/quote)，必要時再抓 [profile2](https://finnhub.io/docs/api/company-profile2) 當股名／幣別；若仍失敗且設有 **`ALPHA_VANTAGE_API_KEY`** 或 **`VITE_ALPHA_VANTAGE_API_KEY`**，再試 [Alpha Vantage GLOBAL_QUOTE](https://www.alphavantage.co/documentation/#latestprice)（免費版對台股常無資料，以美股備援為主）。
 - 台股上市代號：`2330` 或 `2330.TW` 會對應為 Finnhub 的 `TPE:2330`（僅處理上市常用格式；上櫃等需自行確認 Finnhub 代碼）。
 - 伺服器啟動時會用 **`dotenv`** 載入專案根目錄 `.env`（與 Vite 共用檔案即可）。
 
@@ -91,10 +91,11 @@ VITE_QUOTE_API_BASE=https://你的報價服務網域
 VITE_FINNHUB_API_KEY=
 ```
 
-另可設定 Alpha Vantage：
+另可設定 Alpha Vantage（前端 bundle 會含 Key；僅後端使用可只設 `ALPHA_VANTAGE_API_KEY`）：
 
 ```env
 VITE_ALPHA_VANTAGE_API_KEY=
+ALPHA_VANTAGE_API_KEY=
 ```
 
 ## 4) Firestore 規則與索引

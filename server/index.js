@@ -172,26 +172,89 @@ async function fetchQuoteFromFinnhub(rawSymbol, token) {
   }
 }
 
+function resolveAlphaVantageKey() {
+  return String(
+    process.env.ALPHA_VANTAGE_API_KEY ?? process.env.VITE_ALPHA_VANTAGE_API_KEY ?? '',
+  ).trim()
+}
+
+async function fetchQuoteFromAlphaVantage(rawSymbol, apiKey) {
+  const yahooSymbol = normalizeSymbol(rawSymbol)
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(yahooSymbol)}&apikey=${encodeURIComponent(apiKey)}`
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error(`Alpha Vantage HTTP ${response.status}`)
+  }
+
+  const data = await response.json()
+  if (typeof data.Note === 'string' && data.Note.trim()) {
+    throw new Error('Alpha Vantage 請求過於頻繁或暫不可用（Note）')
+  }
+  if (typeof data.Information === 'string' && data.Information.trim()) {
+    throw new Error('Alpha Vantage：請確認 API Key 與額度')
+  }
+
+  const gq = data['Global Quote']
+  if (!gq || Object.keys(gq).length === 0) {
+    throw new Error('Alpha Vantage 無 GLOBAL_QUOTE（免費版可能不含此市場）')
+  }
+
+  const price = Number(gq['05. price'])
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error('Alpha Vantage 無可用成交價')
+  }
+
+  const code = String(rawSymbol).trim().toUpperCase()
+  const prev = Number(gq['08. previous close'])
+  const baseClose =
+    Number.isFinite(prev) && prev > 0 ? prev : price
+  const change = price - baseClose
+  const changePercent = baseClose === 0 ? 0 : (change / baseClose) * 100
+  const currency = isLikelyTaiwanListed(code) ? 'TWD' : 'USD'
+  const displayName = typeof gq['01. symbol'] === 'string' ? gq['01. symbol'].trim() : undefined
+
+  return {
+    symbol: code,
+    yahooSymbol,
+    displayName,
+    price,
+    previousClose: baseClose,
+    change,
+    changePercent,
+    currency,
+    fetchedAt: new Date().toISOString(),
+  }
+}
+
 async function fetchQuote(rawSymbol) {
-  let yahooError
+  const errors = []
+
   try {
     return await fetchQuoteFromYahoo(rawSymbol)
   } catch (err) {
-    yahooError = err
+    errors.push(err instanceof Error ? err.message : String(err))
   }
 
-  const token = String(process.env.FINNHUB_API_KEY ?? '').trim()
-  if (!token) {
-    throw yahooError instanceof Error ? yahooError : new Error(String(yahooError))
+  const finnhubToken = String(process.env.FINNHUB_API_KEY ?? '').trim()
+  if (finnhubToken) {
+    try {
+      return await fetchQuoteFromFinnhub(rawSymbol, finnhubToken)
+    } catch (err) {
+      errors.push(`Finnhub：${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
-  try {
-    return await fetchQuoteFromFinnhub(rawSymbol, token)
-  } catch (finnhubErr) {
-    const yMsg = yahooError instanceof Error ? yahooError.message : String(yahooError)
-    const fMsg = finnhubErr instanceof Error ? finnhubErr.message : String(finnhubErr)
-    throw new Error(`${yMsg}（Finnhub：${fMsg}）`)
+  const alphaKey = resolveAlphaVantageKey()
+  if (alphaKey) {
+    try {
+      return await fetchQuoteFromAlphaVantage(rawSymbol, alphaKey)
+    } catch (err) {
+      errors.push(`Alpha：${err instanceof Error ? err.message : String(err)}`)
+    }
   }
+
+  throw new Error(errors.join(' | '))
 }
 
 app.get('/api/health', (_req, res) => {
