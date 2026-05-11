@@ -9,7 +9,8 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:hosting": "firebase deploy --only hosting"
   },
   "dependencies": {
     "cors": "^2.8.6",

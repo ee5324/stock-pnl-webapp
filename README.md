@@ -170,7 +170,40 @@ service cloud.firestore {
 - 短線策略：本金上限固定 20,000，表單允許最小 0.001 股交易，買進會檢查可用買進上限
 - 預設追蹤頻率：股價 120 秒一次、法人資料 30 分鐘一次（偏保守，降低限流風險）
 
-## 10) 常用指令
+## 10) Push 後線上存取（Firebase Hosting + GitHub Actions）
+
+本機 `npm run dev` 只有你自己能開；要 **push 到 GitHub 後用網址存取**，請用 **Firebase Hosting**（專案已含 `firebase.json`），並讓 **GitHub Actions** 在每次 push 到 `main` 時自動 `npm run build` 再部署。
+
+### 一次性準備
+
+1. [Firebase Console](https://console.firebase.google.com/) 建立／選擇專案，啟用 **Hosting**（與你既有的 **Firestore** 同一專案即可）。
+2. 本機安裝 Firebase CLI：`npm install -g firebase-tools`，在專案根目錄執行 `firebase login` 與 `firebase init hosting`（若尚未連過專案），或至少確認 **`firebase.json`** 的 `public` 為 **`dist`**。
+3. 在 GitHub 倉庫：**Settings → Secrets and variables → Actions**，新增下列 **Repository secrets**（名稱需一致）：
+
+| Secret | 說明 |
+|--------|------|
+| `FIREBASE_SERVICE_ACCOUNT` | Firebase 專案「服務帳戶」JSON 全文（Console → 專案設定 → 服務帳戶 → 產生新私鑰）。 |
+| `FIREBASE_PROJECT_ID` | 專案 ID 字串（與 JSON 內 `project_id` 相同）。 |
+| `VITE_FIREBASE_API_KEY` … `VITE_FIREBASE_APP_ID` | 與本機 `.env` 相同，給 **CI 建置** 用（Vite 會把值編進前端）。 |
+| `VITE_FIREBASE_MEASUREMENT_ID` | 可選；沒有可留空 secret 或填空白佔位。 |
+| `VITE_ENABLE_AUTH_WHITELIST` | 可選，例如 `true` / `false`。 |
+| `VITE_AUTH_WHITELIST_EMAILS` | 可選。 |
+| `VITE_QUOTE_API_BASE` | **建議**：公開可連的報價 API 網址原點（需實作 `GET /api/quote?symbol=`，例如把 `server/index.js` 部署到 Cloud Run / Render）。僅 Hosting 沒有同源 `/api`。 |
+| `VITE_FINNHUB_API_KEY` | 可選；不想架報價伺服器時可當台股備援（Key 會進前端）。 |
+| `VITE_ALPHA_VANTAGE_API_KEY` | 可選。 |
+
+4. 將 workflow 檔一併 push：`.github/workflows/firebase-hosting.yml`。之後每次 **push 到 `main`**，Actions 會建置並部署；完成後在 Firebase Console → **Hosting** 可看到網址（形如 `https://<專案>.web.app`）。
+
+### 手動部署（不用 GitHub）
+
+```bash
+npm run build
+npm run deploy:hosting
+```
+
+需已 `firebase login` 且本機已連線到正確專案。
+
+## 11) 常用指令
 
 ```bash
 npm run dev
@@ -178,4 +211,5 @@ npm run server
 npm run dev:all
 npm run build
 npm run preview
+npm run deploy:hosting
 ```
