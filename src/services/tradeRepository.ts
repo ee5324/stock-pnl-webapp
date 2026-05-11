@@ -16,6 +16,17 @@ const STORAGE_KEY = 'stock-tracker-trades'
 type TradeInput = Omit<TradeRecord, 'id' | 'createdAt'>
 type TradeUpdateInput = Omit<TradeRecord, 'id'>
 
+/** Firestore rejects `undefined` field values; omit those keys before writes. */
+function omitUndefined<T extends Record<string, unknown>>(data: T): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
 function parseRawTrade(value: unknown): TradeRecord | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -138,7 +149,7 @@ export async function createTrade(input: TradeInput): Promise<void> {
     return
   }
 
-  await addDoc(collection(db, 'trades'), payload)
+  await addDoc(collection(db, 'trades'), omitUndefined(payload as Record<string, unknown>))
 }
 
 export async function updateTrade(
@@ -165,7 +176,7 @@ export async function updateTrade(
     return
   }
 
-  await setDoc(doc(db, 'trades', id), payload)
+  await setDoc(doc(db, 'trades', id), omitUndefined(payload as Record<string, unknown>))
 }
 
 export async function removeTrade(id: string): Promise<void> {
