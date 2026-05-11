@@ -54,23 +54,44 @@ VITE_AUTH_WHITELIST_EMAILS=y.chengju@gmail.com
 
 ## 3) 設定股價 API（可選）
 
-股價取得順序：
+### 前端 `fetchLatestQuote` 嘗試順序
 
-1. **本機報價伺服器** `GET /api/quote?symbol=`（`server/index.js`，預設埠 `8787`）— 由後端向 Yahoo 取價，可避免瀏覽器出現 `Failed to fetch`（多數情況為直接打 Yahoo 被 CORS／網路擋下）。
-2. 前端直連 Yahoo Finance（在部分環境仍可能失敗）。
-3. 若有設定 Alpha Vantage，再當備援。
+1. **同源報價服務** `GET /api/quote?symbol=`（本機 Vite proxy → `server/index.js`，或 `VITE_QUOTE_API_BASE` 指向的網域）。
+2. **Finnhub**（若設定 `VITE_FINNHUB_API_KEY`；Key 會被打進前端 bundle，僅建議本機或接受暴露時使用）。
+3. **Yahoo Finance**（瀏覽器直連，常被 CORS 擋）。
+4. **Alpha Vantage**（若設定 `VITE_ALPHA_VANTAGE_API_KEY`）。
 
-本地開發請用 **`npm run dev:all`**（同時跑 Vite + 報價伺服器），或分兩個終端分別執行 `npm run server` 與 `npm run dev`。僅跑 `npm run dev` 時，若沒有開報價伺服器，會先嘗試 `/api/quote` 失敗後再試 Yahoo。
+### 報價伺服器 `server/index.js`（建議）
 
-靜態託管（僅前端、無同源 `/api`）時，請把報價 API 部署到可從瀏覽器存取的網址，並在 `.env` 設定：
+- 先向 **Yahoo chart** 取價；失敗且專案根目錄 `.env` 設有 **`FINNHUB_API_KEY`** 時，改打 [Finnhub Quote](https://finnhub.io/docs/api/quote)，必要時再抓 [profile2](https://finnhub.io/docs/api/company-profile2) 當股名／幣別。
+- 台股上市代號：`2330` 或 `2330.TW` 會對應為 Finnhub 的 `TPE:2330`（僅處理上市常用格式；上櫃等需自行確認 Finnhub 代碼）。
+- 伺服器啟動時會用 **`dotenv`** 載入專案根目錄 `.env`（與 Vite 共用檔案即可）。
+
+免費 API Key 註冊：**<https://finnhub.io/register>**
+
+```env
+FINNHUB_API_KEY=
+```
+
+本地請用 **`npm run dev:all`**（同時跑 Vite + 報價伺服器），或分兩個終端跑 `npm run server` 與 `npm run dev`。僅跑 `npm run dev` 且未設 `VITE_FINNHUB_API_KEY`／`VITE_QUOTE_API_BASE` 時，同源 `/api/quote` 會失敗後再試 Yahoo。
+
+### 靜態託管（僅前端）
+
+把 `server/index.js` 部署成可從網際網路呼叫的服務，並設定：
 
 ```env
 VITE_QUOTE_API_BASE=https://你的報價服務網域
 ```
 
-（值為網址原點、不要尾隨斜線；該服務需提供與本專案 `server/index.js` 相同的 `GET /api/quote?symbol=` 介面。）
+（不要尾隨斜線；需實作與本專案相同的 `GET /api/quote?symbol=`。）
 
-若你也想加 Alpha Vantage 當備援，可在 `.env` 加上：
+可選：不想架後端時，在 `.env` 加上（Key 會進前端）：
+
+```env
+VITE_FINNHUB_API_KEY=
+```
+
+另可設定 Alpha Vantage：
 
 ```env
 VITE_ALPHA_VANTAGE_API_KEY=
