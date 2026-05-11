@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
 
@@ -23,7 +24,33 @@ function normalizeSymbol(inputSymbol) {
   return symbol
 }
 
-async function fetchQuote(rawSymbol) {
+/** 台股上市常用 Finnhub 代碼 TPE:XXXX；美股等維持原 ticker。 */
+function toFinnhubSymbol(rawSymbol) {
+  const s = String(rawSymbol ?? '')
+    .trim()
+    .toUpperCase()
+
+  if (!s) {
+    throw new Error('請提供股票代號')
+  }
+
+  const twWithSuffix = /^(\d{4,6})\.TW$/.exec(s)
+  if (twWithSuffix) {
+    return `TPE:${twWithSuffix[1]}`
+  }
+
+  if (/^\d{4,6}$/.test(s)) {
+    return `TPE:${s}`
+  }
+
+  return s
+}
+
+function isLikelyTaiwanListed(code) {
+  return /^\d{4,6}(\.TW)?$/.test(code)
+}
+
+async function fetchQuoteFromYahoo(rawSymbol) {
   const yahooSymbol = normalizeSymbol(rawSymbol)
   const endpoint = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1m&range=1d`
   const response = await fetch(endpoint, {
@@ -80,6 +107,90 @@ async function fetchQuote(rawSymbol) {
     changePercent,
     currency: meta.currency ?? 'TWD',
     fetchedAt: new Date().toISOString(),
+  }
+}
+
+async function fetchQuoteFromFinnhub(rawSymbol, token) {
+  const finnhubSymbol = toFinnhubSymbol(rawSymbol)
+  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSymbol)}&token=${encodeURIComponent(token)}`
+  const quoteRes = await fetch(quoteUrl)
+
+  if (!quoteRes.ok) {
+    throw new Error(`Finnhub quote HTTP ${quoteRes.status}`)
+  }
+
+  const data = await quoteRes.json()
+  let current = typeof data.c === 'number' && Number.isFinite(data.c) ? data.c : null
+  const previousClose =
+    typeof data.pc === 'number' && Number.isFinite(data.pc) ? data.pc : null
+
+  if (current === 0 || current === null) {
+    if (previousClose !== null && previousClose > 0) {
+      current = previousClose
+    }
+  }
+
+  if (typeof current !== 'number' || !Number.isFinite(current) || current <= 0) {
+    throw new Error('Finnhub 無可用成交價')
+  }
+
+  const baseClose = previousClose !== null && previousClose > 0 ? previousClose : current
+  const change = current - baseClose
+  const changePercent = baseClose === 0 ? 0 : (change / baseClose) * 100
+
+  let displayName
+  let currency = isLikelyTaiwanListed(String(rawSymbol).trim().toUpperCase()) ? 'TWD' : 'USD'
+
+  try {
+    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(finnhubSymbol)}&token=${encodeURIComponent(token)}`
+    const profileRes = await fetch(profileUrl)
+    if (profileRes.ok) {
+      const profile = await profileRes.json()
+      if (typeof profile.name === 'string' && profile.name.trim()) {
+        displayName = profile.name.trim()
+      }
+      if (typeof profile.currency === 'string' && profile.currency.trim()) {
+        currency = profile.currency.trim().toUpperCase()
+      }
+    }
+  } catch {
+    /* profile 為加分項，失敗忽略 */
+  }
+
+  const code = String(rawSymbol).trim().toUpperCase()
+
+  return {
+    symbol: code,
+    yahooSymbol: normalizeSymbol(rawSymbol),
+    displayName,
+    price: current,
+    previousClose: baseClose,
+    change,
+    changePercent,
+    currency,
+    fetchedAt: new Date().toISOString(),
+  }
+}
+
+async function fetchQuote(rawSymbol) {
+  let yahooError
+  try {
+    return await fetchQuoteFromYahoo(rawSymbol)
+  } catch (err) {
+    yahooError = err
+  }
+
+  const token = String(process.env.FINNHUB_API_KEY ?? '').trim()
+  if (!token) {
+    throw yahooError instanceof Error ? yahooError : new Error(String(yahooError))
+  }
+
+  try {
+    return await fetchQuoteFromFinnhub(rawSymbol, token)
+  } catch (finnhubErr) {
+    const yMsg = yahooError instanceof Error ? yahooError.message : String(yahooError)
+    const fMsg = finnhubErr instanceof Error ? finnhubErr.message : String(finnhubErr)
+    throw new Error(`${yMsg}（Finnhub：${fMsg}）`)
   }
 }
 

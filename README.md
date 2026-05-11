@@ -4,7 +4,7 @@
 
 - 新增/刪除買進與賣出交易
 - 透過 Firebase Firestore 儲存交易資料
-- 透過網路 API 抓即時股價（Yahoo Finance，必要時可加 Alpha Vantage）
+- 透過網路 API 抓即時股價（Yahoo Finance、Finnhub 備援、可選 Alpha Vantage）
 - 即時計算已實現/未實現/總損益
 - 計算整體收益率（含累計買進成本、累計賣出回收）
 - 持股報價自動追蹤（可設定更新秒數，不需手動更新）

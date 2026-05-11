@@ -20,6 +20,7 @@ interface AlphaResponse {
 }
 
 const alphaVantageApiKey = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY
+const finnhubApiKey = String(import.meta.env.VITE_FINNHUB_API_KEY ?? '').trim()
 
 function quoteApiBaseUrl(): string {
   return String(import.meta.env.VITE_QUOTE_API_BASE ?? '').trim().replace(/\/$/, '')
@@ -96,7 +97,91 @@ function formatQuoteFetchFailure(errors: string[]): string {
   if (!/Failed to fetch|NetworkError|Load failed|fetch failed/i.test(joined)) {
     return joined
   }
-  return `${joined}（瀏覽器直連 Yahoo 常被擋。本機請用「npm run dev:all」或同時跑「npm run server」與「npm run dev」；僅部署前端時請設定 VITE_QUOTE_API_BASE 指向可公開存取的報價 API，或設定 VITE_ALPHA_VANTAGE_API_KEY 當備援）`
+  return `${joined}（瀏覽器直連 Yahoo 常被擋。建議：本機「npm run dev:all」並在 .env 設 FINNHUB_API_KEY；或設 VITE_QUOTE_API_BASE、VITE_FINNHUB_API_KEY／VITE_ALPHA_VANTAGE_API_KEY 當備援）`
+}
+
+/** 與 server/index.js `toFinnhubSymbol` 一致：台股上市 → TPE:代號。 */
+function userSymbolToFinnhubSymbol(rawSymbol: string): string {
+  const s = rawSymbol.trim().toUpperCase()
+  const twSuffix = /^(\d{4,6})\.TW$/.exec(s)
+  if (twSuffix) {
+    return `TPE:${twSuffix[1]}`
+  }
+  if (/^\d{4,6}$/.test(s)) {
+    return `TPE:${s}`
+  }
+  return s
+}
+
+function isLikelyTaiwanListedSymbol(code: string): boolean {
+  return /^\d{4,6}(\.TW)?$/.test(code.trim().toUpperCase())
+}
+
+interface FinnhubQuoteResponse {
+  c?: number
+  pc?: number
+}
+
+interface FinnhubProfileResponse {
+  name?: string
+  currency?: string
+}
+
+async function fetchFromFinnhub(symbol: string): Promise<QuoteData> {
+  if (!finnhubApiKey) {
+    throw new Error('未設定 VITE_FINNHUB_API_KEY')
+  }
+
+  const finnhubSym = userSymbolToFinnhubSymbol(symbol)
+  const token = encodeURIComponent(finnhubApiKey)
+  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSym)}&token=${token}`
+
+  const quoteRes = await fetch(quoteUrl)
+  if (!quoteRes.ok) {
+    throw new Error(`Finnhub HTTP ${quoteRes.status}`)
+  }
+
+  const data = (await quoteRes.json()) as FinnhubQuoteResponse
+  let current = typeof data.c === 'number' && Number.isFinite(data.c) ? data.c : null
+  const previousClose =
+    typeof data.pc === 'number' && Number.isFinite(data.pc) ? data.pc : null
+
+  if (current === 0 || current === null) {
+    if (previousClose !== null && previousClose > 0) {
+      current = previousClose
+    }
+  }
+
+  if (typeof current !== 'number' || !Number.isFinite(current) || current <= 0) {
+    throw new Error('Finnhub 無可用報價')
+  }
+
+  let displayName: string | undefined
+  let currency = isLikelyTaiwanListedSymbol(symbol) ? 'TWD' : 'USD'
+
+  try {
+    const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(finnhubSym)}&token=${token}`
+    const profileRes = await fetch(profileUrl)
+    if (profileRes.ok) {
+      const profile = (await profileRes.json()) as FinnhubProfileResponse
+      if (typeof profile.name === 'string' && profile.name.trim()) {
+        displayName = profile.name.trim()
+      }
+      if (typeof profile.currency === 'string' && profile.currency.trim()) {
+        currency = profile.currency.trim().toUpperCase()
+      }
+    }
+  } catch {
+    /* optional */
+  }
+
+  return {
+    symbol: symbol.trim().toUpperCase(),
+    price: current,
+    currency,
+    fetchedAt: new Date().toISOString(),
+    ...(displayName ? { displayName } : {}),
+  }
 }
 
 export function normalizeSymbol(rawSymbol: string): string {
@@ -165,10 +250,11 @@ async function fetchFromAlphaVantage(symbol: string): Promise<QuoteData> {
 }
 
 export async function fetchLatestQuote(symbol: string): Promise<QuoteData> {
-  const providers: Array<(value: string) => Promise<QuoteData>> = [
-    fetchFromQuoteServer,
-    fetchFromYahoo,
-  ]
+  const providers: Array<(value: string) => Promise<QuoteData>> = [fetchFromQuoteServer]
+  if (finnhubApiKey) {
+    providers.push(fetchFromFinnhub)
+  }
+  providers.push(fetchFromYahoo)
   if (alphaVantageApiKey) {
     providers.push(fetchFromAlphaVantage)
   }
