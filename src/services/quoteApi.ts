@@ -47,7 +47,16 @@ async function fetchFromQuoteServer(symbol: string): Promise<QuoteData> {
   const base = quoteApiBaseUrl()
   const url = base ? `${base}${path}` : path
 
-  const response = await fetch(url)
+  let response: Response
+  try {
+    response = await fetch(url)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '未知錯誤'
+    throw new Error(
+      `報價伺服器無法連線（${detail}）。本機請執行「npm run dev:all」，或另開終端跑「npm run server」再跑「npm run dev」（需 Vite 將 /api 轉到 8787）。`,
+    )
+  }
+
   const text = await response.text()
   let payload: QuoteServerEnvelope
   try {
@@ -81,7 +90,10 @@ async function fetchFromQuoteServer(symbol: string): Promise<QuoteData> {
   }
 }
 
-/** 使用相對路徑 /api 且未設定 VITE_QUOTE_API_BASE 時，404 或連不上代表沒有掛報價 API，不應與 Yahoo 失敗併列成雜訊。 */
+/**
+ * 僅靜默略過：靜態託管沒有掛 `/api` 時回傳的 404。
+ * 連線失敗（Failed to fetch）不再略過，避免只剩 Yahoo CORS 訊息、看不出是報價伺服器沒開。
+ */
 function isRelativeQuoteServerUnavailable(
   provider: (symbol: string) => Promise<QuoteData>,
   message: string,
@@ -89,10 +101,7 @@ function isRelativeQuoteServerUnavailable(
   if (provider !== fetchFromQuoteServer || quoteApiBaseUrl()) {
     return false
   }
-  if (/報價伺服器 HTTP 404\b/.test(message)) {
-    return true
-  }
-  return /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(message)
+  return /報價伺服器 HTTP 404\b/.test(message)
 }
 
 function formatQuoteFetchFailure(errors: string[]): string {
@@ -100,7 +109,7 @@ function formatQuoteFetchFailure(errors: string[]): string {
   if (!/Failed to fetch|NetworkError|Load failed|fetch failed/i.test(joined)) {
     return joined
   }
-  return `${joined}（瀏覽器直連 Yahoo 常被擋。建議：本機「npm run dev:all」並在 .env 設 FINNHUB_API_KEY；或設 VITE_QUOTE_API_BASE、VITE_FINNHUB_API_KEY／VITE_ALPHA_VANTAGE_API_KEY 當備援）`
+  return `${joined}（瀏覽器直連 Yahoo 常被 CORS 擋下。請確認：① 本機已「npm run dev:all」或已開報價伺服器；② 靜態部署已設 VITE_QUOTE_API_BASE；③ 可另設免費 VITE_FINNHUB_API_KEY（https://finnhub.io/register）或已設 VITE_ALPHA_VANTAGE_API_KEY 並重啟 dev 讓 .env 生效）`
 }
 
 /** 與 server/index.js `toFinnhubSymbol` 一致：台股上市 → TPE:代號。 */
@@ -273,10 +282,11 @@ export async function fetchLatestQuote(symbol: string): Promise<QuoteData> {
   if (finnhubApiKey) {
     providers.push(fetchFromFinnhub)
   }
-  providers.push(fetchFromYahoo)
+  // Alpha 多數環境可從瀏覽器直連；台股 GLOBAL_QUOTE 常無資料，但仍應早於 Yahoo 以避開 CORS
   if (alphaVantageApiKey) {
     providers.push(fetchFromAlphaVantage)
   }
+  providers.push(fetchFromYahoo)
 
   const errors: string[] = []
   for (const provider of providers) {

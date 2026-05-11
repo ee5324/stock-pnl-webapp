@@ -58,8 +58,8 @@ VITE_AUTH_WHITELIST_EMAILS=y.chengju@gmail.com
 
 1. **同源報價服務** `GET /api/quote?symbol=`（本機 Vite proxy → `server/index.js`，或 `VITE_QUOTE_API_BASE` 指向的網域）。
 2. **Finnhub**（若設定 `VITE_FINNHUB_API_KEY`；Key 會被打進前端 bundle，僅建議本機或接受暴露時使用）。
-3. **Yahoo Finance**（瀏覽器直連，常被 CORS 擋）。
-4. **Alpha Vantage**（若設定 `VITE_ALPHA_VANTAGE_API_KEY`）。
+3. **Alpha Vantage**（若設定 `VITE_ALPHA_VANTAGE_API_KEY`；排在 Yahoo 前，減少僅剩 CORS 失敗的機會；台股免費版常仍無 GLOBAL_QUOTE）。
+4. **Yahoo Finance**（瀏覽器直連，常被 CORS 擋）。
 
 ### 報價伺服器 `server/index.js`（建議）
 
