@@ -77,12 +77,26 @@ async function fetchFromQuoteServer(symbol: string): Promise<QuoteData> {
   }
 }
 
+/** 使用相對路徑 /api 且未設定 VITE_QUOTE_API_BASE 時，404 或連不上代表沒有掛報價 API，不應與 Yahoo 失敗併列成雜訊。 */
+function isRelativeQuoteServerUnavailable(
+  provider: (symbol: string) => Promise<QuoteData>,
+  message: string,
+): boolean {
+  if (provider !== fetchFromQuoteServer || quoteApiBaseUrl()) {
+    return false
+  }
+  if (/報價伺服器 HTTP 404\b/.test(message)) {
+    return true
+  }
+  return /Failed to fetch|NetworkError|Load failed|fetch failed/i.test(message)
+}
+
 function formatQuoteFetchFailure(errors: string[]): string {
   const joined = errors.join(' | ')
   if (!/Failed to fetch|NetworkError|Load failed|fetch failed/i.test(joined)) {
     return joined
   }
-  return `${joined}（直接從瀏覽器連 Yahoo 常被 CORS／網路擋下。請執行「npm run dev:all」或另開終端跑「npm run server」再開前端，靜態部署請設定 VITE_QUOTE_API_BASE 指向你的報價 API 網址）`
+  return `${joined}（瀏覽器直連 Yahoo 常被擋。本機請用「npm run dev:all」或同時跑「npm run server」與「npm run dev」；僅部署前端時請設定 VITE_QUOTE_API_BASE 指向可公開存取的報價 API，或設定 VITE_ALPHA_VANTAGE_API_KEY 當備援）`
 }
 
 export function normalizeSymbol(rawSymbol: string): string {
@@ -165,6 +179,9 @@ export async function fetchLatestQuote(symbol: string): Promise<QuoteData> {
       return await provider(symbol)
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知錯誤'
+      if (isRelativeQuoteServerUnavailable(provider, message)) {
+        continue
+      }
       errors.push(message)
     }
   }
