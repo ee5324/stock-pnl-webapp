@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { fetchTopTradedTaiwanSymbols } from '../services/twseMarketApi'
 import { fetchYahooDailyHistory } from '../services/yahooHistoryApi'
+import { symbolWithCompanyName } from '../utils/symbolDisplay'
 
 type StreakDirection = 'UP' | 'DOWN' | 'FLAT'
 
 interface StockSuggestion {
   symbol: string
   normalizedSymbol: string
+  displayName?: string
   latestClose: number
   tenDayChangePct: number
   currentDirection: StreakDirection
@@ -128,6 +130,7 @@ function buildSuggestion(
   symbol: string,
   normalizedSymbol: string,
   closes: number[],
+  displayName?: string,
 ): StockSuggestion {
   const latestClose = closes[closes.length - 1]
   const ma5 = calculateSma(closes, 5)
@@ -210,6 +213,7 @@ function buildSuggestion(
   return {
     symbol,
     normalizedSymbol,
+    ...(displayName ? { displayName } : {}),
     latestClose,
     tenDayChangePct,
     currentDirection: streakStats.currentDirection,
@@ -291,7 +295,7 @@ function renderSuggestionTable(
           <table>
             <thead>
               <tr>
-                <th>代號</th>
+                <th>代號／名稱</th>
                 <th>最新價</th>
                 <th>近10日漲跌</th>
                 <th>連續天數</th>
@@ -307,7 +311,12 @@ function renderSuggestionTable(
             <tbody>
               {rows.map((item) => (
                 <tr key={item.normalizedSymbol}>
-                  <td data-label="代號">{item.symbol}</td>
+                  <td data-label="代號／名稱">
+                    {symbolWithCompanyName(
+                      item.symbol,
+                      item.displayName ? { displayName: item.displayName } : undefined,
+                    )}
+                  </td>
                   <td data-label="最新價">{numberFormatter.format(item.latestClose)}</td>
                   <td data-label="近10日漲跌" className={toSignClass(item.tenDayChangePct)}>
                     {percentFormatter.format(item.tenDayChangePct)}%
@@ -395,7 +404,12 @@ function StockSuggestionsSection({ trackedSymbols }: StockSuggestionsSectionProp
       const results = await Promise.allSettled(
         symbols.map(async (symbol) => {
           const history = await fetchYahooDailyHistory(symbol)
-          return buildSuggestion(history.symbol, history.normalizedSymbol, history.closes)
+          return buildSuggestion(
+            history.symbol,
+            history.normalizedSymbol,
+            history.closes,
+            history.displayName,
+          )
         }),
       )
 

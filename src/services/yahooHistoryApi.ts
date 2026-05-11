@@ -3,6 +3,11 @@ import { normalizeSymbol } from './quoteApi'
 interface YahooChartResponse {
   chart?: {
     result?: Array<{
+      meta?: {
+        longName?: string
+        shortName?: string
+        symbol?: string
+      }
       timestamp?: number[]
       indicators?: {
         quote?: Array<{
@@ -20,6 +25,7 @@ export interface YahooHistoryData {
   symbol: string
   normalizedSymbol: string
   closes: number[]
+  displayName?: string
 }
 
 export async function fetchYahooDailyHistory(
@@ -40,6 +46,13 @@ export async function fetchYahooDailyHistory(
   }
 
   const result = payload.chart?.result?.[0]
+  const meta = result?.meta
+  const displayNameRaw =
+    typeof meta?.longName === 'string' && meta.longName.trim()
+      ? meta.longName.trim()
+      : typeof meta?.shortName === 'string' && meta.shortName.trim()
+        ? meta.shortName.trim()
+        : undefined
   const closes = result?.indicators?.quote?.[0]?.close ?? []
   const validCloses = closes.filter(
     (value): value is number => typeof value === 'number' && Number.isFinite(value),
@@ -53,5 +66,6 @@ export async function fetchYahooDailyHistory(
     symbol: symbol.trim().toUpperCase(),
     normalizedSymbol,
     closes: validCloses,
+    ...(displayNameRaw ? { displayName: displayNameRaw } : {}),
   }
 }

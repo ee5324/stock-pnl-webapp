@@ -63,9 +63,17 @@ async function fetchQuote(rawSymbol) {
   const change = price - previousClose
   const changePercent = previousClose === 0 ? 0 : (change / previousClose) * 100
 
+  const displayNameRaw =
+    typeof meta.longName === 'string' && meta.longName.trim()
+      ? meta.longName.trim()
+      : typeof meta.shortName === 'string' && meta.shortName.trim()
+        ? meta.shortName.trim()
+        : undefined
+
   return {
     symbol: String(rawSymbol).trim().toUpperCase(),
     yahooSymbol,
+    displayName: displayNameRaw,
     price,
     previousClose,
     change,

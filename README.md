@@ -54,7 +54,22 @@ VITE_AUTH_WHITELIST_EMAILS=y.chengju@gmail.com
 
 ## 3) 設定股價 API（可選）
 
-預設會直接由前端連到 Yahoo Finance 取得報價。  
+股價取得順序：
+
+1. **本機報價伺服器** `GET /api/quote?symbol=`（`server/index.js`，預設埠 `8787`）— 由後端向 Yahoo 取價，可避免瀏覽器出現 `Failed to fetch`（多數情況為直接打 Yahoo 被 CORS／網路擋下）。
+2. 前端直連 Yahoo Finance（在部分環境仍可能失敗）。
+3. 若有設定 Alpha Vantage，再當備援。
+
+本地開發請用 **`npm run dev:all`**（同時跑 Vite + 報價伺服器），或分兩個終端分別執行 `npm run server` 與 `npm run dev`。僅跑 `npm run dev` 時，若沒有開報價伺服器，會先嘗試 `/api/quote` 失敗後再試 Yahoo。
+
+靜態託管（僅前端、無同源 `/api`）時，請把報價 API 部署到可從瀏覽器存取的網址，並在 `.env` 設定：
+
+```env
+VITE_QUOTE_API_BASE=https://你的報價服務網域
+```
+
+（值為網址原點、不要尾隨斜線；該服務需提供與本專案 `server/index.js` 相同的 `GET /api/quote?symbol=` 介面。）
+
 若你也想加 Alpha Vantage 當備援，可在 `.env` 加上：
 
 ```env

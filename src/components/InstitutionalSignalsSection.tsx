@@ -8,6 +8,8 @@ interface InstitutionalSignalsSectionProps {
   autoIntervalMinutes: number
   lastUpdatedAt: string
   onRefresh: () => Promise<void> | void
+  /** 將代號擴成「代號 · 股名」（例如依即時報價快取） */
+  formatSymbol?: (symbol: string) => string
 }
 
 const numberFormatter = new Intl.NumberFormat('zh-TW', {
@@ -57,6 +59,7 @@ function InstitutionalSignalsSection({
   autoIntervalMinutes,
   lastUpdatedAt,
   onRefresh,
+  formatSymbol,
 }: InstitutionalSignalsSectionProps) {
   return (
     <section className="card">
@@ -86,7 +89,7 @@ function InstitutionalSignalsSection({
           <table>
             <thead>
               <tr>
-                <th>代號</th>
+                <th>代號／名稱</th>
                 <th>資料日</th>
                 <th>外資買賣超</th>
                 <th>外資標示</th>
@@ -98,7 +101,9 @@ function InstitutionalSignalsSection({
             <tbody>
               {rows.map((row) => (
                 <tr key={row.symbol}>
-                  <td data-label="代號">{row.symbol}</td>
+                  <td data-label="代號／名稱">
+                    {formatSymbol ? formatSymbol(row.symbol) : row.symbol}
+                  </td>
                   <td data-label="資料日">{row.tradeDate}</td>
                   <td data-label="外資買賣超">{formatLots(row.foreignNetLots)}</td>
                   <td data-label="外資標示">

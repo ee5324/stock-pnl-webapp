@@ -36,6 +36,7 @@ import {
   type PriceTargetMode,
   type TPlus2Thresholds,
 } from './utils/calculations'
+import { symbolWithCompanyName } from './utils/symbolDisplay'
 import type {
   FeeSettings,
   InstitutionalFlowEntry,
@@ -407,6 +408,12 @@ function App() {
       (left, right) => left.localeCompare(right),
     )
   }, [tradeTrackedSymbols, longTermSymbols])
+
+  const formatSymbolCell = useCallback(
+    (sym: string) =>
+      symbolWithCompanyName(sym, quotes[sym.trim().toUpperCase()] ?? undefined),
+    [quotes],
+  )
 
   const watchlistSymbols = useMemo(() => {
     return parseSymbolList(watchlistInput)
@@ -1445,7 +1452,7 @@ function App() {
                   <table>
                     <thead>
                       <tr>
-                        <th>代號</th>
+                        <th>代號／名稱</th>
                         <th>持股</th>
                         <th>累計買進投入</th>
                         <th>持有成本</th>
@@ -1459,7 +1466,9 @@ function App() {
                     <tbody>
                       {positionsByReturnImpact.map((position) => (
                         <tr key={position.symbol}>
-                          <td data-label="代號">{position.symbol}</td>
+                          <td data-label="代號／名稱">
+                            {formatSymbolCell(position.symbol)}
+                          </td>
                           <td data-label="持股">{formatNumber(position.quantity)}</td>
                           <td data-label="累計買進投入">
                             {formatCurrency(position.lifetimeBuyCost)}
@@ -1547,7 +1556,7 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>股數</th>
                       <th>均價</th>
                       <th>現價</th>
@@ -1567,7 +1576,7 @@ function App() {
                       )
                       return (
                         <tr key={item.symbol}>
-                          <td data-label="代號">{item.symbol}</td>
+                          <td data-label="代號／名稱">{formatSymbolCell(item.symbol)}</td>
                           <td data-label="股數">{formatNumber(item.quantity)}</td>
                           <td data-label="均價">{formatCurrency(item.averageCost)}</td>
                           <td data-label="現價">
@@ -1686,6 +1695,7 @@ function App() {
                 autoIntervalMinutes={institutionalAutoIntervalMin}
                 lastUpdatedAt={lastInstitutionalRefreshAt}
                 onRefresh={refreshInstitutionalSignals}
+                formatSymbol={formatSymbolCell}
               />
             </>
           )}
@@ -1720,7 +1730,7 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>股數</th>
                       <th>均價</th>
                       <th>持有成本</th>
@@ -1739,7 +1749,9 @@ function App() {
                       const quote = quotes[position.symbol]
                       return (
                         <tr key={position.symbol}>
-                          <td data-label="代號">{position.symbol}</td>
+                          <td data-label="代號／名稱">
+                            {formatSymbolCell(position.symbol)}
+                          </td>
                           <td data-label="股數">{formatNumber(position.quantity)}</td>
                           <td data-label="均價">{formatCurrency(position.averageCost)}</td>
                           <td data-label="持有成本">{formatCurrency(position.costBasis)}</td>
@@ -1838,7 +1850,7 @@ function App() {
                   <thead>
                     <tr>
                       <th>時間</th>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>類型</th>
                       <th>股數</th>
                       <th>成交價</th>
@@ -1865,7 +1877,9 @@ function App() {
                               hour12: false,
                             })}
                           </td>
-                          <td data-label="代號">{trade.symbol}</td>
+                          <td data-label="代號／名稱">
+                            {formatSymbolCell(trade.symbol)}
+                          </td>
                           <td data-label="類型">
                             {trade.action === 'BUY' ? '買進' : '賣出'}
                           </td>
@@ -2077,7 +2091,7 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>現價</th>
                       <th>報酬率</th>
                       <th>停損參考</th>
@@ -2091,7 +2105,7 @@ function App() {
                       const adviceDisplay = getLongTermAdviceDisplay(item.level)
                       return (
                         <tr key={item.symbol}>
-                          <td data-label="代號">{item.symbol}</td>
+                          <td data-label="代號／名稱">{formatSymbolCell(item.symbol)}</td>
                           <td data-label="現價">
                             {item.currentPrice === null ? '--' : formatCurrency(item.currentPrice)}
                           </td>
@@ -2185,7 +2199,7 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>外資標示</th>
                       <th>法人標示</th>
                       <th>警訊說明</th>
@@ -2194,7 +2208,7 @@ function App() {
                   <tbody>
                     {rotationCandidates.map((item) => (
                       <tr key={`rotation-${item.symbol}`}>
-                        <td data-label="代號">{item.symbol}</td>
+                        <td data-label="代號／名稱">{formatSymbolCell(item.symbol)}</td>
                         <td data-label="外資標示">
                           <span
                             className={`signal-badge ${
@@ -2318,7 +2332,7 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代號</th>
+                      <th>代號／名稱</th>
                       <th>股數</th>
                       <th>平均成本</th>
                       <th>現價</th>
@@ -2339,7 +2353,7 @@ function App() {
                           : ((row.currentPrice - row.averageCost) / row.averageCost) * 100
                       return (
                         <tr key={row.id}>
-                          <td data-label="代號">{row.symbol}</td>
+                          <td data-label="代號／名稱">{formatSymbolCell(row.symbol)}</td>
                           <td data-label="股數">{formatNumber(row.quantity)}</td>
                           <td data-label="平均成本">{formatCurrency(row.averageCost)}</td>
                           <td data-label="現價">
