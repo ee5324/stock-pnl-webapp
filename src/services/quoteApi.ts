@@ -17,6 +17,9 @@ interface AlphaResponse {
     '05. price'?: string
     '01. symbol'?: string
   }
+  /** 頻率過高或試用限制時常見 */
+  Note?: string
+  Information?: string
 }
 
 const alphaVantageApiKey = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY
@@ -233,17 +236,33 @@ async function fetchFromAlphaVantage(symbol: string): Promise<QuoteData> {
   }
 
   const data = (await response.json()) as AlphaResponse
+  if (typeof data.Note === 'string' && data.Note.trim()) {
+    throw new Error('Alpha Vantage 請求過於頻繁或暫不可用（Note），請稍後再試')
+  }
+  if (typeof data.Information === 'string' && data.Information.trim()) {
+    throw new Error('Alpha Vantage：請確認 API Key 與額度（Information）')
+  }
+
   const quoteData = data['Global Quote']
-  const parsedPrice = Number(quoteData?.['05. price'])
+  if (!quoteData || Object.keys(quoteData).length === 0) {
+    throw new Error(
+      'Alpha Vantage 無 GLOBAL_QUOTE 資料（免費版常僅支援部分美股代號，台股請依賴報價伺服器／Yahoo／Finnhub）',
+    )
+  }
+
+  const parsedPrice = Number(quoteData['05. price'])
 
   if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
     throw new Error('Alpha Vantage 無可用報價')
   }
 
+  const code = symbol.trim().toUpperCase()
+  const currency = /^\d{4,6}(\.TW)?$/.test(code) ? 'TWD' : 'USD'
+
   return {
-    symbol: symbol.trim().toUpperCase(),
+    symbol: code,
     price: parsedPrice,
-    currency: 'USD',
+    currency,
     fetchedAt: new Date().toISOString(),
     displayName: quoteData?.['01. symbol'] ?? normalized,
   }
